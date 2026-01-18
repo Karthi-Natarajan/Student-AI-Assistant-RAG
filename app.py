@@ -1,10 +1,10 @@
+import os
 import streamlit as st
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 from langchain_community.vectorstores import FAISS
-
+from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 
 
@@ -13,8 +13,9 @@ st.set_page_config(page_title="Student AI Assistant (RAG)", page_icon="📄", la
 st.title("📄 Student AI Assistant (RAG)")
 st.caption("Upload any PDF and ask questions. Uses RAG (Retrieval + LLM) for document-grounded answers.")
 
+
 model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-embed_model = "sentence-transformers/all-MiniLM-L6-v2"
+embed_model_name = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 @st.cache_resource
@@ -26,30 +27,32 @@ def load_llm():
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_new_tokens=220,
+        max_new_tokens=200,
         do_sample=True,
-        temperature=0.7
+        temperature=0.7,
     )
     return HuggingFacePipeline(pipeline=pipe)
 
 
 @st.cache_resource
 def load_embeddings():
-    return HuggingFaceEmbeddings(model_name=embed_model)
+    return HuggingFaceEmbeddings(model_name=embed_model_name)
 
 
 def build_vectorstore(pdf_path):
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100
-    )
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     chunks = splitter.split_documents(documents)
+
+    # 🔥 IMPORTANT FIX: if no chunks, stop before FAISS crashes
+    if len(chunks) == 0:
+        return None, len(documents), 0
 
     embeddings = load_embeddings()
     vs = FAISS.from_documents(chunks, embeddings)
+
     return vs, len(documents), len(chunks)
 
 
@@ -60,20 +63,26 @@ suggested_questions = [
     "Extract important dates, names, and titles.",
     "What skills or technologies are mentioned?",
     "Generate 5 interview questions from this PDF.",
-    "Write a LinkedIn post based on this PDF."
+    "Write a LinkedIn post based on this PDF.",
 ]
 
 
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
 if uploaded_file:
-    with open("temp.pdf", "wb") as f:
+    temp_path = "temp.pdf"
+
+    with open(temp_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
     with st.spinner("Building vector database from your PDF..."):
-        vectorstore, pages, chunks = build_vectorstore("temp.pdf")
+        vectorstore, pages, chunks = build_vectorstore(temp_path)
 
-    st.success(f"PDF processed successfully ✅ Pages: {pages} | Chunks: {chunks}")
+    if vectorstore is None:
+        st.error("❌ Could not extract text from this PDF (maybe it's scanned/image-based). Try another PDF.")
+        st.stop()
+
+    st.success(f"✅ PDF processed successfully | Pages: {pages} | Chunks: {chunks}")
 
     st.subheader("💡 Suggested Questions")
     cols = st.columns(3)
@@ -86,7 +95,7 @@ if uploaded_file:
     if query:
         with st.spinner("Retrieving answer..."):
             docs = vectorstore.similarity_search(query, k=3)
-            context = "\n\n".join([d.page_content[:800] for d in docs])
+            context = "\n\n".join([d.page_content[:1000] for d in docs])
 
             prompt = f"""
 You are a helpful assistant.
@@ -107,9 +116,10 @@ Answer:
         st.subheader("✅ Answer")
         st.write(answer)
 
-        with st.expander("🔍 Retrieved Context"):
+        with st.expander("📌 Retrieved Context"):
             for i, d in enumerate(docs, 1):
-                st.markdown(f"**Chunk {i}:**")
+                st.markdown(f"### Chunk {i}")
                 st.write(d.page_content)
+
 else:
     st.info("Upload a PDF to start.")
