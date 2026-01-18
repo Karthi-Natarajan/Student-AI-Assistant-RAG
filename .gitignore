@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+.env/
+.venv/
+
+# Streamlit
+.streamlit/
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary / local files
+temp.pdf
+
+# FAISS / Vector DB (generated locally)
+faiss_index/
+*.faiss
+*.pkl
+
+# Data folder (your PDFs)
+data/
+*.pdf
+
+# Jupyter (if any)
+.ipynb_checkpoints/
