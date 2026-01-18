@@ -1,7 +1,7 @@
 import streamlit as st
 
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 
@@ -50,14 +50,13 @@ def build_vectorstore(pdf_path):
 
     chunks = splitter.split_documents(documents)
 
-    # ✅ IMPORTANT FIX: remove empty chunks
     clean_chunks = []
     for c in chunks:
         if c.page_content and c.page_content.strip():
             clean_chunks.append(c)
 
     if len(clean_chunks) == 0:
-        return None, len(documents), 0
+        return None, 0, 0
 
     embeddings = load_embeddings()
     vs = FAISS.from_documents(clean_chunks, embeddings)
