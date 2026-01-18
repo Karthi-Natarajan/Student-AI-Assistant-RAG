@@ -3,9 +3,8 @@ import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
-
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEndpoint
 
 
 st.set_page_config(page_title="Student AI Assistant (RAG)", page_icon="📚", layout="wide")
@@ -13,25 +12,8 @@ st.set_page_config(page_title="Student AI Assistant (RAG)", page_icon="📚", la
 st.title("📚 Student AI Assistant (RAG)")
 st.caption("Upload any PDF and ask questions. Uses RAG (Retrieval + LLM) for document-grounded answers.")
 
-model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 embed_model = "sentence-transformers/all-MiniLM-L6-v2"
-
-
-@st.cache_resource
-def load_llm():
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
-
-    pipe = pipeline(
-        "text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        max_new_tokens=220,
-        do_sample=True,
-        temperature=0.7,
-    )
-
-    return HuggingFacePipeline(pipeline=pipe)
+hf_model = "mistralai/Mistral-7B-Instruct-v0.2"
 
 
 @st.cache_resource
@@ -39,15 +21,20 @@ def load_embeddings():
     return HuggingFaceEmbeddings(model_name=embed_model)
 
 
+@st.cache_resource
+def load_llm():
+    return HuggingFaceEndpoint(
+        repo_id=hf_model,
+        temperature=0.5,
+        max_new_tokens=250,
+    )
+
+
 def build_vectorstore(pdf_path):
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100
-    )
-
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     chunks = splitter.split_documents(documents)
 
     clean_chunks = []
@@ -98,8 +85,7 @@ if uploaded_file:
     if query:
         with st.spinner("Retrieving answer..."):
             docs = vectorstore.similarity_search(query, k=3)
-
-            context = "\n\n".join([d.page_content[:800] for d in docs])
+            context = "\n\n".join([d.page_content[:900] for d in docs])
 
             prompt = f"""
 You are a helpful assistant.
